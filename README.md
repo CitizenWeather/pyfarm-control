@@ -20,9 +20,37 @@ alongside `pyfarm.control.spec`/`pyfarm.control.expr` from `pyfarm-core`.
 - **`actuators`** — `LoggingActuator` (records what it *would* have done),
   `RelayActuator`, `PwmActuator`, `MqttActuator`. Hardware/network backends are
   injected, so everything imports without `RPi.GPIO` or `paho-mqtt`.
-- **`sensors`** — `ReplaySensor`/`replay_sensors_from_csv` and `FakeSensor`.
+- **`sensors`** — `ReplaySensor`/`replay_sensors_from_csv`, `FakeSensor`, and
+  hardware drivers `DHT22TemperatureSensor`/`DHT22HumiditySensor` (gpio),
+  `AnalogSensor` (injectable ADC backend).
 - **`alerts`** — `AlertEvaluator` (cooldown-aware, reuses the core
   `SafeExpressionEvaluator`) and ntfy/telegram/webhook channels.
+- **`persist`** — `SQLiteStore` (full run history: every sensor reading, event,
+  and actuator state) implements `SnapshotStore` for crash recovery + audit.
+
+## Quick start
+
+```bash
+# Validate a spec
+pyfarm grow validate grow.yaml
+
+# Run against hardware (persists to SQLite, exposes API)
+pyfarm grow start grow.yaml --api-port 8765 --db pyfarm.db
+
+# Live status
+curl http://localhost:8765/status
+
+# Query history (if --api-port is set)
+curl "http://localhost:8765/history/sensor-readings?metric=temperature"
+curl http://localhost:8765/runs
+
+# Past run summary / export
+pyfarm grow history <run_id> --db pyfarm.db
+pyfarm grow export <run_id> --db pyfarm.db --output run.csv
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for systemd and Docker guides.
+See [EXTENSIONS.md](EXTENSIONS.md) to add custom sensors, actuators, and channels.
 
 ## Replay mode
 
