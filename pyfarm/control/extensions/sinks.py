@@ -26,7 +26,7 @@ class NotifierSink:
         self._default_routing = default_routing or {}
 
     async def handle(self, event: ControlEvent) -> None:
-        channels = event.data.get("channels")
+        channels = (event.data or {}).get("channels")
         if channels is None:
             channels = self._default_routing.get(event.kind, [])
         for channel_name in channels:
