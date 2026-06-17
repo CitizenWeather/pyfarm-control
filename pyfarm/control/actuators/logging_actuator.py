@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .base import BaseActuator
 
@@ -34,7 +34,7 @@ class LoggingActuator(BaseActuator):
         # Deduplicate consecutive identical states
         if self.log and self.log[-1].action == action:
             return
-        entry = ActuatorLogEntry(name=self.name, action=action, timestamp=datetime.utcnow())
+        entry = ActuatorLogEntry(name=self.name, action=action, timestamp=datetime.now(timezone.utc))
         self.log.append(entry)
         if self.verbose:
             print(f"[{entry.timestamp.isoformat()}] actuator:{self.name} -> {action}")

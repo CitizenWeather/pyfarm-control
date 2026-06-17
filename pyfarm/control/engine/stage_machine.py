@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable
 
 from pyfarm.core.models import EventKind
@@ -23,7 +23,7 @@ class StageMachine:
         """Check exit conditions and advance the stage if met. Returns True if advanced."""
         stage = ctx.current_stage
         elapsed_days = (
-            (datetime.utcnow() - ctx.stage_entered_at).total_seconds() / 86400
+            (datetime.now(timezone.utc) - ctx.stage_entered_at).total_seconds() / 86400
         )
 
         if elapsed_days < stage.duration.min_days:
@@ -73,7 +73,7 @@ class StageMachine:
             ctx.log(EventKind.SYSTEM, "All stages complete — grow finished")
             return False
         ctx.current_stage_index = next_idx
-        ctx.stage_entered_at = datetime.utcnow()
+        ctx.stage_entered_at = datetime.now(timezone.utc)
         ctx.log(
             EventKind.STAGE_TRANSITION,
             f"Advanced to stage '{ctx.current_stage.name}'",

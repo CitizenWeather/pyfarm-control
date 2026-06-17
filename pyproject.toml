@@ -11,7 +11,12 @@ dependencies = [
     "pyfarm-core",
     "pydantic>=2.0",
     "pyyaml>=6.0",
+    "fastapi>=0.100",
+    "uvicorn>=0.23",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["pyfarm"]
