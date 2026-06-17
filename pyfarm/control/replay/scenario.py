@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pyfarm.core.models import Unit
 from pyfarm.control.spec.loader import load_spec
-from pyfarm.control.actuators.logging_actuator import LoggingActuator
+from pyfarm.control.extensions import build_actuator
 from pyfarm.control.engine.runner import ControlRunner
 from .fake_sensor import ReplaySensor
 
@@ -34,7 +34,10 @@ async def run_scenario(
         ReplaySensor(sensor_csv, metric=m, unit=_METRIC_UNITS.get(m, Unit.UNITLESS))
         for m in metrics
     ]
-    actuators = {name: LoggingActuator(name) for name in spec.actuators}
+    actuators = {
+        name: build_actuator(name, actuator_spec)
+        for name, actuator_spec in spec.actuators.items()
+    }
     runner = ControlRunner(spec=spec, sensors=sensors, actuators=actuators, tick_seconds=0)
 
     # Drive ticks until all sensor streams are exhausted

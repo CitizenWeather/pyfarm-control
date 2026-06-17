@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from itertools import islice
 from typing import Any
 
+from pyfarm.core.events import EventBus
 from pyfarm.core.models import SensorReading, ActuatorState, ControlEvent, EventKind
 from pyfarm.control.spec.schema import GrowSpec, Stage
 
@@ -27,6 +28,7 @@ class ControlContext:
     derived: dict[str, float] = field(default_factory=dict)
     actuator_states: dict[str, ActuatorState] = field(default_factory=dict)
     events: deque[ControlEvent] = field(default_factory=lambda: deque(maxlen=1000))
+    bus: EventBus | None = None
 
     @classmethod
     def new(cls, spec: GrowSpec) -> ControlContext:
@@ -42,7 +44,10 @@ class ControlContext:
         return self.spec.stages[self.current_stage_index]
 
     def log(self, kind: EventKind, message: str, **data: Any) -> None:
-        self.events.append(ControlEvent(kind=kind, message=message, data=data))
+        event = ControlEvent(kind=kind, message=message, data=data)
+        self.events.append(event)
+        if self.bus is not None:
+            self.bus.emit(event)
 
     def to_status_dict(self) -> dict[str, Any]:
         """Serialisable snapshot for the HTTP status API."""

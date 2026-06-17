@@ -4,6 +4,7 @@ import asyncio
 import math
 from datetime import datetime, timezone
 
+from pyfarm.core.events import EventBus, EventSink
 from pyfarm.core.models import EventKind, ActuatorState
 from pyfarm.control.spec.schema import GrowSpec
 from .context import ControlContext
@@ -25,9 +26,10 @@ class ControlRunner:
       2. Compute derived metrics (VPD etc)
       3. Evaluate stage exit condition -> maybe advance stage
       4. For each actuator: evaluate interlock -> command on/off
-      5. Evaluate alert conditions -> maybe fire notifications
-      6. Persist context snapshot
-      7. Sleep until next tick
+      5. Evaluate alert conditions -> log events
+      6. Drain the event bus -> fan out to sinks (notifications etc.)
+      7. Persist context snapshot
+      8. Sleep until next tick
     """
 
     def __init__(
@@ -35,10 +37,11 @@ class ControlRunner:
         spec: GrowSpec,
         sensors: list,
         actuators: dict,
-        notifier=None,
+        notifier: EventSink | None = None,
         store=None,
         tick_seconds: float = 10.0,
         api_port: int | None = None,
+        sinks: list[EventSink] | None = None,
     ):
         self.spec = spec
         self.sensors = sensors
@@ -53,6 +56,14 @@ class ControlRunner:
         self._alert_cooldowns: dict[str, datetime] = {}
         self._running = False
         self._api_task: asyncio.Task | None = None
+
+        # Event spine: producers emit via ctx.log; sinks consume on drain().
+        self._bus = EventBus()
+        self.ctx.bus = self._bus
+        if notifier is not None:
+            self._bus.subscribe(notifier)
+        for sink in sinks or []:
+            self._bus.subscribe(sink)
 
     async def run(self) -> None:
         self._running = True
@@ -120,7 +131,7 @@ class ControlRunner:
             # Safety overrides
             prev = self.ctx.actuator_states.get(name)
             safety = actuator_spec.safety
-            if prev and prev.last_toggled_at:
+            if safety and prev and prev.last_toggled_at:
                 on_seconds_limit = None
                 if safety.max_on_seconds is not None:
                     on_seconds_limit = safety.max_on_seconds
@@ -138,7 +149,10 @@ class ControlRunner:
         # 5. alerts
         await self._evaluate_alerts(flat)
 
-        # 6. persist
+        # 6. fan out buffered events to sinks (notifications etc.)
+        await self._bus.drain()
+
+        # 7. persist
         if self.store:
             await self.store.write_snapshot(self.ctx)
 
@@ -167,6 +181,11 @@ class ControlRunner:
             if last and (now - last).total_seconds() < alert.cooldown_minutes * 60:
                 continue
             self._alert_cooldowns[alert.condition] = now
-            self.ctx.log(EventKind.ALERT_FIRED, alert.message, severity=alert.severity)
-            if self.notifier:
-                await self.notifier.send(alert, alert.message)
+            # Notification flows event -> bus -> NotifierSink, not an inline call.
+            # channels carries the alert's target channels for the sink to route on.
+            self.ctx.log(
+                EventKind.ALERT_FIRED,
+                alert.message,
+                severity=alert.severity,
+                channels=alert.channels,
+            )
