@@ -105,7 +105,9 @@ class ControlRunner:
         import uvicorn
         from pyfarm.control.api import make_app
 
-        app = make_app(self.ctx)
+        from pyfarm.control.persist import SQLiteStore
+        store = self.store if isinstance(self.store, SQLiteStore) else None
+        app = make_app(self.ctx, store=store)
         config = uvicorn.Config(
             app, host="127.0.0.1", port=self.api_port, log_level="warning"
         )
