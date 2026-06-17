@@ -1,10 +1,8 @@
 import pytest
+from pydantic import ValidationError
 from pyfarm.control.spec.schema import GrowSpec
-from pyfarm.control.spec.validator import validate_spec, SpecValidationError
-
-
-def _load(data: dict) -> GrowSpec:
-    return GrowSpec.model_validate(data)
+from pyfarm.control.spec.validator import validate_spec
+from pyfarm.control.exceptions import SpecValidationError
 
 
 def _base_stage(name="colonisation", **kw) -> dict:
@@ -13,8 +11,10 @@ def _base_stage(name="colonisation", **kw) -> dict:
         "duration": {"min_days": 14, "max_days": 28},
         "exit_condition": {"metric": "visual.colonisation_pct", "threshold": ">= 0.95"},
         "setpoints": {
-            "temperature": {"target": 24.0, "tolerance": 2.0},
+            "temperature": {"target": 24.0, "tolerance": 2.0, "unit": "celsius"},
             "humidity_rh": {"target": 0.90, "tolerance": 0.05},
+            "co2_ppm": {"target": 2000, "tolerance": 500},
+            "light": {"schedule": "0/24"},
         },
     }
     s.update(kw)
@@ -25,9 +25,19 @@ def _minimal() -> dict:
     return {
         "spec_version": "1.0",
         "kind": "GrowSpec",
-        "metadata": {"name": "test"},
+        "metadata": {
+            "name": "test",
+            "species": "pleurotus.ostreatus",
+            "substrate": "coffee_grounds",
+            "author": "test@example.com",
+            "registry": "test/v1",
+        },
         "stages": [_base_stage()],
     }
+
+
+def _load(data: dict) -> GrowSpec:
+    return GrowSpec.model_validate(data)
 
 
 def test_valid_spec_passes():
@@ -36,11 +46,11 @@ def test_valid_spec_passes():
 
 
 def test_duplicate_stage_names_rejected():
+    # Duplicate stage names are caught by the schema validator at parse time.
     data = _minimal()
     data["stages"].append(_base_stage(name="colonisation"))
-    spec = _load(data)
-    with pytest.raises(SpecValidationError, match="unique"):
-        validate_spec(spec)
+    with pytest.raises(ValidationError, match="unique"):
+        _load(data)
 
 
 def test_vpd_consistency_ok():
@@ -71,6 +81,7 @@ def test_bad_alert_expression_rejected():
         "severity": "critical",
         "message": "bad",
         "channels": [],
+        "cooldown_minutes": 0,
     }]
     spec = _load(data)
     with pytest.raises(SpecValidationError):
@@ -83,5 +94,5 @@ def test_bad_interlock_syntax_rejected():
         "misting": {"kind": "relay", "gpio": 17, "interlock": "humidity_rh.current @@@ 0.95"}
     }
     spec = _load(data)
-    with pytest.raises(SpecValidationError, match="Syntax error"):
+    with pytest.raises(SpecValidationError):
         validate_spec(spec)

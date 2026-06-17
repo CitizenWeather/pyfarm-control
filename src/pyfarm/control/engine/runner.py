@@ -51,6 +51,7 @@ class ControlRunner:
         tick_seconds: float = 10.0,
         clock: Callable[[], datetime] = _now,
         context: ControlContext | None = None,
+        api_port: int | None = None,
     ) -> None:
         self.spec = spec
         self.sensors = list(sensors)
@@ -65,6 +66,9 @@ class ControlRunner:
         self._expr = SafeExpressionEvaluator()
         self.ctx = context or ControlContext.new(spec)
         self.store.restore(self.ctx)
+        self.api_port = api_port
+        self._running = False
+        self._api_task: asyncio.Task | None = None
         # Seed states as "off for a long time" so safety min-off-time limits
         # don't block the very first command after start-up.
         cold_start = self._clock() - timedelta(days=1)
@@ -76,10 +80,37 @@ class ControlRunner:
     # -- public loops -----------------------------------------------------
 
     async def run(self) -> None:
-        """Run forever, ticking every ``tick_seconds``."""
-        while True:
-            await self.tick()
-            await asyncio.sleep(self.tick_seconds)
+        """Run until :meth:`stop` is called, ticking every ``tick_seconds``.
+
+        Optionally starts a FastAPI ``/status`` endpoint on ``api_port`` as a
+        background task.
+        """
+        self._running = True
+        if self.api_port is not None:
+            self._api_task = asyncio.create_task(self._serve_api())
+        try:
+            while self._running:
+                await self.tick()
+                await asyncio.sleep(self.tick_seconds)
+        finally:
+            if self._api_task is not None and not self._api_task.done():
+                self._api_task.cancel()
+                await asyncio.gather(self._api_task, return_exceptions=True)
+
+    def stop(self) -> None:
+        """Signal the :meth:`run` loop to exit after the current tick."""
+        self._running = False
+
+    async def _serve_api(self) -> None:
+        import uvicorn
+        from pyfarm.control.api import make_app
+
+        app = make_app(self.ctx)
+        config = uvicorn.Config(
+            app, host="127.0.0.1", port=self.api_port, log_level="warning"
+        )
+        server = uvicorn.Server(config)
+        await server.serve()
 
     async def run_until_exhausted(self, max_ticks: int = 100_000) -> int:
         """Tick until a replay sensor runs out of data (or ``max_ticks``).
@@ -163,6 +194,11 @@ class ControlRunner:
         if spec is None or spec.interlock is None:
             return True
         context = self.ctx.as_flat_dict()
+        # Provide numeric defaults for target/tolerance so interlocks that
+        # reference them (e.g. "temperature.current < target - tolerance") remain
+        # evaluable even when no controller is attached. A controller overrides these.
+        context.setdefault("target", 0.0)
+        context.setdefault("tolerance", 0.0)
         controller = self.controllers.get(name)
         if controller is not None and controller.metric is not None:
             setpoint = controller.setpoint(self.ctx)
