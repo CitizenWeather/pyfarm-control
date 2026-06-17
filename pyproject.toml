@@ -11,34 +11,19 @@ license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
     "pyfarm-core>=0.1.0",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7",
-]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/pyfarm"]
-
-[tool.hatch.metadata]
-# pyfarm-core is a sibling namespace package distributed alongside this one.
-allow-direct-references = true
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-description = "Grow spec loader, control engine, and replay harness for pyfarm"
-requires-python = ">=3.11"
-dependencies = [
-    "pyfarm-core",
-    "pydantic>=2.0",
-    "pyyaml>=6.0",
     "fastapi>=0.100",
     "uvicorn>=0.23",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio"]
+dev = ["pytest>=7", "pytest-asyncio>=0.21"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["pyfarm"]
+packages = ["src/pyfarm"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

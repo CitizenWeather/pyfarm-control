@@ -3,17 +3,9 @@
 from __future__ import annotations
 
 import json
-from typing import Callable
-from urllib import request
 
 from pyfarm.control.alerts.channels.base import Channel, Notification
-
-Sender = Callable[[str, bytes, dict[str, str]], None]
-
-
-def _urllib_sender(url: str, data: bytes, headers: dict[str, str]) -> None:  # pragma: no cover - network
-    req = request.Request(url, data=data, headers=headers, method="POST")
-    request.urlopen(req, timeout=10).close()
+from pyfarm.control.alerts.channels.http import Sender, _urllib_sender
 
 
 class WebhookChannel(Channel):
