@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 
-from pyfarm.core.models import EventKind
+from pyfarm.core.models import EventKind, ActuatorState
 from pyfarm.control.spec.schema import GrowSpec
 from .context import ControlContext
 from .evaluator import SafeExpressionEvaluator
@@ -38,6 +38,7 @@ class ControlRunner:
         notifier=None,
         store=None,
         tick_seconds: float = 10.0,
+        api_port: int | None = None,
     ):
         self.spec = spec
         self.sensors = sensors
@@ -45,6 +46,7 @@ class ControlRunner:
         self.notifier = notifier
         self.store = store
         self.tick = tick_seconds
+        self.api_port = api_port
         self.ctx = ControlContext.new(spec)
         self._stage_machine = StageMachine()
         self._evaluator = SafeExpressionEvaluator()
@@ -54,12 +56,22 @@ class ControlRunner:
     async def run(self) -> None:
         self._running = True
         self.ctx.log(EventKind.SYSTEM, f"ControlRunner started — spec: {self.spec.metadata.name}")
+        if self.api_port:
+            asyncio.create_task(self._serve_api())
         while self._running:
             try:
                 await self._tick()
             except Exception as e:
                 self.ctx.log(EventKind.SENSOR_FAILURE, f"Tick error: {e}")
             await asyncio.sleep(self.tick)
+
+    async def _serve_api(self) -> None:
+        import uvicorn
+        from pyfarm.control.api import make_app
+        app = make_app(self.ctx)
+        config = uvicorn.Config(app, host="127.0.0.1", port=self.api_port, log_level="warning")
+        server = uvicorn.Server(config)
+        await server.serve()
 
     def stop(self) -> None:
         self._running = False
@@ -80,6 +92,7 @@ class ControlRunner:
         await self._stage_machine.evaluate(self.ctx)
 
         # 4. actuators
+        now = datetime.now(timezone.utc)
         stage = self.ctx.current_stage
         disabled = set(stage.controls_disabled)
         for name, actuator_spec in self.spec.actuators.items():
@@ -87,7 +100,7 @@ class ControlRunner:
             if actuator is None:
                 continue
             if name in disabled:
-                await actuator.off()
+                await self._set_actuator(name, actuator, False, now)
                 continue
             interlock_clear = True
             if actuator_spec.interlock:
@@ -98,10 +111,24 @@ class ControlRunner:
                 except Exception as e:
                     self.ctx.log(EventKind.SYSTEM, f"Interlock eval error for '{name}': {e}")
                     interlock_clear = False
-            if interlock_clear:
-                await actuator.on()
-            else:
-                await actuator.off()
+            should_be_on = interlock_clear
+            # Safety overrides
+            prev = self.ctx.actuator_states.get(name)
+            safety = actuator_spec.safety
+            if prev and prev.last_toggled_at:
+                on_seconds_limit = None
+                if safety.max_on_seconds is not None:
+                    on_seconds_limit = safety.max_on_seconds
+                elif safety.max_on_minutes is not None:
+                    on_seconds_limit = safety.max_on_minutes * 60
+                elapsed = (now - prev.last_toggled_at.replace(tzinfo=timezone.utc)).total_seconds()
+                if should_be_on and prev.state and on_seconds_limit and elapsed > on_seconds_limit:
+                    self.ctx.log(EventKind.SYSTEM, f"Safety: '{name}' max-on exceeded ({elapsed:.0f}s), forcing off")
+                    should_be_on = False
+                if should_be_on and not prev.state and safety.min_off_seconds and elapsed < safety.min_off_seconds:
+                    self.ctx.log(EventKind.SYSTEM, f"Safety: '{name}' min-off not met ({elapsed:.0f}s), holding off")
+                    should_be_on = False
+            await self._set_actuator(name, actuator, should_be_on, now)
 
         # 5. alerts
         await self._evaluate_alerts()
@@ -109,6 +136,18 @@ class ControlRunner:
         # 6. persist
         if self.store:
             await self.store.write_snapshot(self.ctx)
+
+    async def _set_actuator(self, name: str, actuator, state: bool, now: datetime) -> None:
+        prev = self.ctx.actuator_states.get(name)
+        toggled = prev is None or prev.state != state
+        if state:
+            await actuator.on()
+        else:
+            await actuator.off()
+        toggled_at = now if toggled else (prev.last_toggled_at if prev else now)
+        self.ctx.actuator_states[name] = ActuatorState(
+            name=name, state=state, timestamp=now, last_toggled_at=toggled_at
+        )
 
     async def _evaluate_alerts(self) -> None:
         now = datetime.utcnow()
