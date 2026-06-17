@@ -1,0 +1,121 @@
+spec_version: "1.0"
+kind: GrowSpec
+metadata:
+  name: oyster-coffee-grounds-fruiting
+  species: pleurotus.ostreatus
+  substrate: coffee_grounds_supplemented
+  author: someone@example.com
+  registry: pyfarm/community/fungi/oyster-classic-v3
+
+stages:
+  - name: colonisation
+    duration:
+      min_days: 14
+      max_days: 28
+    exit_condition:
+      metric: visual.colonisation_pct
+      threshold: ">= 0.95"
+    setpoints:
+      temperature:
+        target: 24.0
+        unit: celsius
+        tolerance: 2.0
+      humidity_rh:
+        target: 0.90
+        tolerance: 0.05
+      co2_ppm:
+        target: 2000
+        tolerance: 500
+      light:
+        schedule: "0/24"
+    controls_disabled: [misting, FAE]
+
+  - name: initiation
+    duration:
+      min_days: 3
+      max_days: 7
+    exit_condition:
+      metric: visual.pins_count
+      threshold: ">= 10"
+    setpoints:
+      temperature:
+        target: 18.0
+        unit: celsius
+        tolerance: 2.0
+      humidity_rh:
+        target: 0.95
+        tolerance: 0.03
+      co2_ppm:
+        target: 800
+        tolerance: 200
+      light:
+        schedule: "12/12"
+        intensity_lux: 200
+    vpd:
+      target: 0.11
+      tolerance: 0.1
+
+  - name: fruiting
+    duration:
+      min_days: 5
+      max_days: 10
+    exit_condition:
+      metric: visual.cap_margin
+      threshold: "starting_to_flatten"
+    setpoints:
+      temperature:
+        target: 18.0
+        unit: celsius
+        tolerance: 2.0
+      humidity_rh:
+        target: 0.90
+        tolerance: 0.05
+      co2_ppm:
+        target: 1000
+        tolerance: 300
+      light:
+        schedule: "12/12"
+
+alerts:
+  - condition: "temperature.current > 28"
+    severity: critical
+    message: "Heat stress — above 28°C for {duration}"
+    channels: [push, telegram]
+    cooldown_minutes: 30
+
+  - condition: "humidity_rh.current < 0.80 AND stage == fruiting"
+    severity: warning
+    message: "Humidity low during fruiting — check misting pump"
+    channels: [push]
+    cooldown_minutes: 15
+
+actuators:
+  misting:
+    kind: relay
+    gpio: 17
+    interlock: "humidity_rh.current < 0.95"
+    safety:
+      max_on_seconds: 30
+      min_off_seconds: 300
+
+  exhaust_fan:
+    kind: relay
+    gpio: 27
+    pwm: false
+
+  heater:
+    kind: relay
+    gpio: 22
+    interlock: "temperature.current < 26"
+    safety:
+      max_on_minutes: 60
+
+notifications:
+  channels:
+    push:
+      provider: ntfy
+      topic: my-mushroom-tent
+    telegram:
+      provider: telegram
+      bot_token: "${TELEGRAM_BOT_TOKEN}"
+      chat_id: "${TELEGRAM_CHAT_ID}"
