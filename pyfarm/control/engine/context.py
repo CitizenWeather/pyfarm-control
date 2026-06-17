@@ -3,7 +3,8 @@ from __future__ import annotations
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
+from itertools import islice
 from typing import Any
 
 from pyfarm.core.models import SensorReading, ActuatorState, ControlEvent, EventKind
@@ -33,7 +34,7 @@ class ControlContext:
             run_id=str(uuid.uuid4()),
             spec=spec,
             current_stage_index=0,
-            stage_entered_at=datetime.utcnow(),
+            stage_entered_at=datetime.now(timezone.utc),
         )
 
     @property
@@ -46,7 +47,7 @@ class ControlContext:
     def to_status_dict(self) -> dict[str, Any]:
         """Serialisable snapshot for the HTTP status API."""
         stage = self.current_stage
-        elapsed_days = (datetime.utcnow() - self.stage_entered_at).total_seconds() / 86400
+        elapsed_days = (datetime.now(timezone.utc) - self.stage_entered_at).total_seconds() / 86400
         return {
             "run_id": self.run_id,
             "spec_name": self.spec.metadata.name,
@@ -67,7 +68,7 @@ class ControlContext:
                     "message": e.message,
                     "timestamp": e.timestamp.isoformat(),
                 }
-                for e in list(self.events)[-20:]
+                for e in reversed(list(islice(reversed(self.events), 20)))
             ],
         }
 
@@ -76,7 +77,7 @@ class ControlContext:
         flat: dict[str, Any] = {
             "stage": self.current_stage.name,
             "elapsed_days": (
-                (datetime.utcnow() - self.stage_entered_at).total_seconds() / 86400
+                (datetime.now(timezone.utc) - self.stage_entered_at).total_seconds() / 86400
             ),
         }
         for metric, reading in self.readings.items():
