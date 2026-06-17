@@ -5,6 +5,28 @@ build-backend = "hatchling.build"
 [project]
 name = "pyfarm-control"
 version = "0.1.0"
+description = "Control engine for pyfarm GrowSpecs: runner, controllers, actuators, alerts, replay"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "pyfarm-core>=0.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pyfarm"]
+
+[tool.hatch.metadata]
+# pyfarm-core is a sibling namespace package distributed alongside this one.
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 description = "Grow spec loader, control engine, and replay harness for pyfarm"
 requires-python = ">=3.11"
 dependencies = [
