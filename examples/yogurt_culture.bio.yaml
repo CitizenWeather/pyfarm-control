@@ -1,0 +1,48 @@
+spec_version: "1.0"
+kind: BioSpec
+metadata:
+  name: "Yogurt Culture"
+  author: "pyfarm-biology"
+  organism: "L. bulgaricus + S. thermophilus"
+  substrate: "whole milk"
+  target_ph: 4.5
+  vessel_liters: 2.0
+stages:
+  - name: inoculation
+    duration:
+      min_days: 0
+      max_days: 1
+    exit_condition:
+      metric: temperature_c
+      threshold: ">= 42.0"
+    setpoints:
+      temperature_c: 43.0
+      ph_target: 6.5
+  - name: incubation
+    duration:
+      min_days: 0
+      max_days: 1
+    exit_condition:
+      metric: ph
+      threshold: "< 4.6"
+    setpoints:
+      temperature_c: 43.0
+      ph_target: 4.5
+      ph_tolerance: 0.1
+  - name: crash_cool
+    duration:
+      min_days: 0
+      max_days: 1
+    exit_condition:
+      metric: temperature_c
+      threshold: "< 8.0"
+    setpoints:
+      temperature_c: 4.0
+alerts: []
+actuators:
+  heater:
+    kind: heater
+    safety:
+      max_on_minutes: 120
+  chiller:
+    kind: chiller

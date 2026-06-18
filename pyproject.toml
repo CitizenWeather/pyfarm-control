@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyfarm-biology"
+version = "0.1.0"
+description = "Fermentation, incubation, and lab assay specs for the pyfarm ecosystem"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "pyfarm-core>=0.1.0",
+    "pydantic>=2",
+    "pyyaml>=6",
+    "click>=8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-asyncio>=0.21"]
+
+[project.entry-points."pyfarm.commands"]
+bio = "pyfarm.biology.cli:bio"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pyfarm"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

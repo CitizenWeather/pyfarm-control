@@ -1,0 +1,40 @@
+spec_version: "1.0"
+kind: BioSpec
+metadata:
+  name: "Kombucha Batch #1"
+  author: "pyfarm-biology"
+  organism: "SCOBY (Acetobacter + Gluconobacter)"
+  substrate: "sweet tea 10% w/v sucrose"
+  target_ph: 3.2
+  vessel_liters: 5.0
+stages:
+  - name: primary_ferment
+    duration:
+      min_days: 7
+      max_days: 14
+    exit_condition:
+      metric: ph
+      threshold: "< 3.5"
+    setpoints:
+      temperature_c: 24.0
+      ph_target: 3.2
+      ph_tolerance: 0.3
+  - name: secondary_ferment
+    duration:
+      min_days: 2
+      max_days: 5
+    exit_condition:
+      metric: co2_pct
+      threshold: "> 0.8"
+    setpoints:
+      temperature_c: 22.0
+      ph_target: 3.0
+      ph_tolerance: 0.2
+      pressure_kpa: 150.0
+alerts:
+  - condition: "ph < 2.8"
+    severity: warning
+    message: "pH critically low — check fermentation"
+    channels: []
+    cooldown_minutes: 60
+actuators: {}
