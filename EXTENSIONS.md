@@ -101,9 +101,33 @@ class MQTTSensor(Sensor):
         )
 ```
 
+### Declaring sensors in the GrowSpec (preferred)
+
+Sensors are first-class in the GrowSpec YAML; `pyfarm grow start` builds them
+via `build_sensor()` — no Python glue required:
+
+```yaml
+sensors:
+  air_temp:
+    kind: dht22_temp        # dht22_temp | dht22_humidity | analog | fake | replay
+    metric: temperature
+    unit: celsius
+    gpio: 4
+  air_humidity:
+    kind: dht22_humidity
+    metric: humidity_rh
+    unit: percent
+    gpio: 4
+```
+
+`fake` (constant `value:`) and `replay` (`csv:`/`column:`) need no hardware, so
+the full loop runs on any machine. `analog` still needs an ADC backend wired in
+code (below), so construct it manually and pass it via `sensors=`.
+
 ### DHT22 sensor (built-in)
 
-`pyfarm.control.sensors.dht22` ships two sensors for the DHT22:
+`pyfarm.control.sensors.dht22` ships two sensors for the DHT22, if you'd rather
+construct them yourself:
 
 ```python
 from pyfarm.control.sensors.dht22 import DHT22TemperatureSensor, DHT22HumiditySensor

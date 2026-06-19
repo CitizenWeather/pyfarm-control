@@ -89,6 +89,18 @@ alerts:
     channels: [push]
     cooldown_minutes: 15
 
+sensors:
+  air_temp:
+    kind: dht22_temp
+    metric: temperature
+    unit: celsius
+    gpio: 4
+  air_humidity:
+    kind: dht22_humidity
+    metric: humidity_rh
+    unit: percent
+    gpio: 4
+
 actuators:
   misting:
     kind: relay
