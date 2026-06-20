@@ -25,6 +25,20 @@ def register_actuator(kind: str) -> Callable[[_A], _A]:
     return deco
 
 
+def _load_iot_drivers() -> None:
+    """Load hardware drivers from pyfarm-iot if available."""
+    try:
+        import pyfarm.iot  # noqa: F401 — triggers driver registration in pyfarm-iot registry
+        from pyfarm.iot.registry import _ACTUATOR_REGISTRY as iot_registry
+
+        # Copy registered hardware drivers into control's registry
+        for kind, cls in iot_registry.items():
+            if kind not in _ACTUATOR_REGISTRY:
+                _ACTUATOR_REGISTRY[kind] = cls
+    except ImportError:
+        pass  # pyfarm-iot not installed; use logging fallback
+
+
 def register_notifier(provider: str) -> Callable[[_N], _N]:
     """Register a notifier class for a channel `provider` (e.g. 'console'). Constructor: cls(name, channel)."""
 
@@ -74,3 +88,7 @@ def _console_notifier_cls() -> type:
 
         cls = _NOTIFIER_REGISTRY["console"]
     return cls
+
+
+# Load hardware drivers from pyfarm-iot on module import (if available)
+_load_iot_drivers()
