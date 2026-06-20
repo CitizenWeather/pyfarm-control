@@ -7,8 +7,8 @@ from datetime import datetime, timezone
 from itertools import islice
 from typing import Any
 
-from pyfarm.core.events import EventBus
 from pyfarm.core.models import SensorReading, ActuatorState, ControlEvent, EventKind
+from pyfarm.observability.event_bus import EventBus
 from pyfarm.control.spec.schema import GrowSpec, Stage
 
 

@@ -4,11 +4,11 @@ import asyncio
 import math
 from datetime import datetime, timezone
 
-from pyfarm.core.events import EventBus, EventSink
 from pyfarm.core.models import EventKind, ActuatorState
+from pyfarm.observability.event_bus import EventBus, EventSink
 from pyfarm.control.spec.schema import GrowSpec
 from .context import ControlContext
-from .evaluator import SafeExpressionEvaluator
+from .evaluator import ExpressionError, SafeExpressionEvaluator
 from .stage_machine import StageMachine
 
 
@@ -74,8 +74,12 @@ class ControlRunner:
             while self._running:
                 try:
                     await self._tick()
+                except ExpressionError as e:
+                    self.ctx.log(EventKind.SYSTEM, f"Expression evaluation error in tick: {e}")
+                except (OSError, RuntimeError) as e:
+                    self.ctx.log(EventKind.SENSOR_FAILURE, f"Sensor/actuator error: {e}")
                 except Exception as e:
-                    self.ctx.log(EventKind.SENSOR_FAILURE, f"Tick error: {e}")
+                    self.ctx.log(EventKind.SENSOR_FAILURE, f"Unexpected tick error: {type(e).__name__}: {e}")
                 await asyncio.sleep(self.tick)
         finally:
             if self._api_task and not self._api_task.done():
@@ -124,7 +128,7 @@ class ControlRunner:
             if actuator_spec.interlock:
                 try:
                     interlock_clear = self._evaluator.evaluate(actuator_spec.interlock, flat)
-                except Exception as e:
+                except ExpressionError as e:
                     self.ctx.log(EventKind.SYSTEM, f"Interlock eval error for '{name}': {e}")
                     interlock_clear = False
             should_be_on = interlock_clear
@@ -173,7 +177,8 @@ class ControlRunner:
         for alert in self.spec.alerts:
             try:
                 fired = self._evaluator.evaluate(alert.condition, flat)
-            except Exception:
+            except ExpressionError as e:
+                self.ctx.log(EventKind.SYSTEM, f"Alert evaluation error: {e}")
                 continue
             if not fired:
                 continue
