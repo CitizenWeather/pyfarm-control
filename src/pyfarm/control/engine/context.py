@@ -13,48 +13,22 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Deque
 
+# The value types are owned by pyfarm-core so drivers, persistence and the
+# status API all speak the same types. Re-exported here for backwards
+# compatibility with the many modules that import them from this location.
+from pyfarm.core.models import ActuatorState, ControlEvent, SensorReading
 from pyfarm.control.spec.schema import GrowSpec, Stage
+
+__all__ = [
+    "SensorReading",
+    "ActuatorState",
+    "ControlEvent",
+    "ControlContext",
+]
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-@dataclass
-class SensorReading:
-    """A single sensor sample."""
-
-    value: float
-    unit: str
-    timestamp: datetime = field(default_factory=_now)
-
-    def flatline_minutes(self, *, value_changed_at: datetime, now: datetime | None = None) -> float:
-        now = now or _now()
-        return max(0.0, (now - value_changed_at).total_seconds() / 60.0)
-
-
-@dataclass
-class ActuatorState:
-    """What the engine last commanded an actuator to do."""
-
-    name: str
-    on: bool = False
-    command: Any = False
-    last_changed: datetime = field(default_factory=_now)
-
-    def seconds_in_state(self, now: datetime | None = None) -> float:
-        now = now or _now()
-        return max(0.0, (now - self.last_changed).total_seconds())
-
-
-@dataclass
-class ControlEvent:
-    """A timestamped record of something the engine did or noticed."""
-
-    kind: str  # "stage_advanced", "actuator", "alert", "sensor_failure", ...
-    message: str
-    timestamp: datetime = field(default_factory=_now)
-    data: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

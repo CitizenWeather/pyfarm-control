@@ -1,19 +1,14 @@
 """Runtime errors raised by the control engine.
 
-Spec *loading* errors live in :class:`pyfarm.control.exceptions.SpecValidationError`
-(shipped by pyfarm-core). These are the *runtime* counterparts.
+The hierarchy is owned by ``pyfarm-core`` (so sensor/actuator drivers and the
+engine raise and catch the same types); it is re-exported here for backwards
+compatibility with code that imports from ``pyfarm.control.engine.errors``.
+
+Spec *loading* errors live in :class:`pyfarm.control.exceptions.SpecValidationError`.
 """
 
 from __future__ import annotations
 
+from pyfarm.core.errors import ControlError, ReplayExhausted, SensorReadError
 
-class ControlError(Exception):
-    """Base class for control-engine runtime errors."""
-
-
-class SensorReadError(ControlError):
-    """Raised when a sensor cannot produce a reading."""
-
-
-class ReplayExhausted(ControlError):
-    """Raised by replay sensors when the recorded data is exhausted."""
+__all__ = ["ControlError", "SensorReadError", "ReplayExhausted"]

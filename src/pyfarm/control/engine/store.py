@@ -7,30 +7,18 @@ readings) that :meth:`restore` can rehydrate onto a fresh context.
 
 from __future__ import annotations
 
-import abc
 import json
 from datetime import datetime
 from pathlib import Path
 
+# The store contract (and the no-op default) are owned by pyfarm-core; the
+# concrete stores below know the full ControlContext and subclass it. Both are
+# re-exported here so callers can keep importing from this module.
+from pyfarm.core.storage import NullStore, SnapshotStore
+
 from pyfarm.control.engine.context import ControlContext, SensorReading
 
-
-class SnapshotStore(abc.ABC):
-    @abc.abstractmethod
-    async def write_snapshot(self, ctx: ControlContext) -> None: ...
-
-    @abc.abstractmethod
-    def restore(self, ctx: ControlContext) -> bool:
-        """Rehydrate ``ctx`` in place from the last snapshot. Returns True if a
-        snapshot was found and applied."""
-
-
-class NullStore(SnapshotStore):
-    async def write_snapshot(self, ctx: ControlContext) -> None:
-        return None
-
-    def restore(self, ctx: ControlContext) -> bool:
-        return False
+__all__ = ["SnapshotStore", "NullStore", "JsonSnapshotStore"]
 
 
 class JsonSnapshotStore(SnapshotStore):
