@@ -4,8 +4,8 @@ import asyncio
 import math
 from datetime import datetime, timezone
 
-from pyfarm.core.events import EventBus, EventSink
 from pyfarm.core.models import EventKind, ActuatorState
+from pyfarm.observability.event_bus import EventBus, EventSink
 from pyfarm.control.spec.schema import GrowSpec
 from .context import ControlContext
 from .evaluator import SafeExpressionEvaluator
