@@ -1,16 +1,64 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
+from pyfarm.core.models import ControlEvent
+from pyfarm.observability.event_bus import EventSink
 from pyfarm.control.engine.context import ControlContext
+
+
+class WebSocketEventManager(EventSink):
+    """Broadcasts control events to all connected WebSocket clients."""
+
+    def __init__(self):
+        """Initialize with empty client set."""
+        self.clients: set[WebSocket] = set()
+
+    async def handle(self, event: ControlEvent) -> None:
+        """Broadcast event to all connected clients."""
+        message = {
+            "kind": event.kind.value if hasattr(event.kind, "value") else str(event.kind),
+            "message": event.message,
+            "timestamp": event.timestamp.isoformat(),
+            "data": event.data or {},
+        }
+        # Send to all connected clients, removing any that disconnect
+        disconnected = set()
+        for client in self.clients:
+            try:
+                await client.send_json(message)
+            except Exception:
+                # Client disconnected or errored; mark for removal
+                disconnected.add(client)
+        self.clients -= disconnected
+
+    async def add_client(self, websocket: WebSocket) -> None:
+        """Register a new WebSocket client."""
+        await websocket.accept()
+        self.clients.add(websocket)
+
+    async def remove_client(self, websocket: WebSocket) -> None:
+        """Unregister a WebSocket client."""
+        self.clients.discard(websocket)
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 def make_app(ctx: ControlContext) -> FastAPI:
     app = FastAPI(title="pyfarm-control", docs_url=None, redoc_url=None)
+
+    # WebSocket event manager for real-time streaming
+    ws_manager = WebSocketEventManager()
+    if ctx.bus is not None:
+        ctx.bus.subscribe(ws_manager)
 
     # Legacy endpoint (v0)
     @app.get("/status")
@@ -75,12 +123,14 @@ def make_app(ctx: ControlContext) -> FastAPI:
     async def actuator_override(
         actuator_id: str = Query(...),
         state: bool = Query(...),
+        duration_seconds: int = Query(86400),
     ) -> dict[str, Any]:
         """Override an actuator state (requires authentication in Phase 2).
 
         Query parameters:
         - actuator_id: ID of actuator to override
         - state: Desired state (true=on, false=off)
+        - duration_seconds: How long override lasts (default: 86400 = 24h, max: 604800 = 1 week)
         """
         # Note: In Phase 2, this will validate auth token and apply permission checks
         if actuator_id not in ctx.actuator_states:
@@ -89,14 +139,18 @@ def make_app(ctx: ControlContext) -> FastAPI:
                 detail=f"Actuator '{actuator_id}' not found",
             )
 
-        # TODO: Actually apply the override to the running control engine
-        # This requires callback or shared state with the runner
+        # Validate duration
+        duration_seconds = max(1, min(duration_seconds, 604800))  # 1 second to 1 week
+
+        # Apply the override to the running control engine
+        override = ctx.apply_actuator_override(actuator_id, state, duration_seconds)
 
         return {
             "actuator_id": actuator_id,
             "state": state,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "note": "Override registered; will apply on next control tick",
+            "applied_at": override.applied_at.isoformat(),
+            "expires_at": override.expires_at.isoformat(),
+            "note": "Override applied; will take effect on next control tick",
         }
 
     @app.get("/api/v1/events")
@@ -122,15 +176,22 @@ def make_app(ctx: ControlContext) -> FastAPI:
             "count": len(recent),
         }
 
-    # TODO: WebSocket endpoint for real-time event streaming
-    # @app.websocket("/api/v1/events/stream")
-    # async def events_stream(websocket: WebSocket) -> None:
-    #     await websocket.accept()
-    #     try:
-    #         while True:
-    #             # Subscribe to bus events and stream to client
-    #             pass
-    #     except Exception:
-    #         pass
+    @app.websocket("/api/v1/events/stream")
+    async def events_stream(websocket: WebSocket) -> None:
+        """WebSocket endpoint for real-time event streaming.
+
+        Clients connect here and receive ControlEvents in real-time as they occur.
+        """
+        try:
+            await ws_manager.add_client(websocket)
+            # Keep connection open; events are sent via the event manager
+            while True:
+                # Keep the connection alive by waiting for messages (which we ignore)
+                # The WebSocket will be kept open and events will be pushed via ws_manager
+                _ = await websocket.receive_text()
+        except WebSocketDisconnect:
+            await ws_manager.remove_client(websocket)
+        except Exception:
+            await ws_manager.remove_client(websocket)
 
     return app

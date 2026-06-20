@@ -3,13 +3,23 @@ from __future__ import annotations
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from itertools import islice
 from typing import Any
 
 from pyfarm.core.models import SensorReading, ActuatorState, ControlEvent, EventKind
 from pyfarm.observability.event_bus import EventBus
 from pyfarm.control.spec.schema import GrowSpec, Stage
+
+
+@dataclass
+class ActuatorOverride:
+    """Temporary override for an actuator state."""
+    actuator_id: str
+    desired_state: bool
+    applied_at: datetime
+    expires_at: datetime
+    reason: str | None = None
 
 
 @dataclass
@@ -28,6 +38,7 @@ class ControlContext:
     derived: dict[str, float] = field(default_factory=dict)
     actuator_states: dict[str, ActuatorState] = field(default_factory=dict)
     events: deque[ControlEvent] = field(default_factory=lambda: deque(maxlen=1000))
+    overrides: dict[str, ActuatorOverride] = field(default_factory=dict)
     bus: EventBus | None = None
 
     @classmethod
@@ -48,6 +59,36 @@ class ControlContext:
         self.events.append(event)
         if self.bus is not None:
             self.bus.emit(event)
+
+    def apply_actuator_override(
+        self, actuator_id: str, desired_state: bool, duration_seconds: int = 86400, reason: str | None = None
+    ) -> ActuatorOverride:
+        """Register an actuator override. Expires after duration_seconds (default 24h)."""
+        now = datetime.now(timezone.utc)
+        override = ActuatorOverride(
+            actuator_id=actuator_id,
+            desired_state=desired_state,
+            applied_at=now,
+            expires_at=now + timedelta(seconds=duration_seconds),
+            reason=reason,
+        )
+        self.overrides[actuator_id] = override
+        self.log(
+            EventKind.SYSTEM,
+            f"Actuator override registered: {actuator_id}={desired_state}",
+            override_reason=reason,
+            expires_in_seconds=duration_seconds,
+        )
+        return override
+
+    def get_active_override(self, actuator_id: str) -> ActuatorOverride | None:
+        """Get active override for actuator, or None if expired."""
+        override = self.overrides.get(actuator_id)
+        if override and datetime.now(timezone.utc) < override.expires_at:
+            return override
+        if override:
+            del self.overrides[actuator_id]
+        return None
 
     def to_status_dict(self) -> dict[str, Any]:
         """Serialisable snapshot for the HTTP status API."""

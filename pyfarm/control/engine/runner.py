@@ -124,14 +124,22 @@ class ControlRunner:
             if name in disabled:
                 await self._set_actuator(name, actuator, False, now)
                 continue
-            interlock_clear = True
-            if actuator_spec.interlock:
-                try:
-                    interlock_clear = self._evaluator.evaluate(actuator_spec.interlock, flat)
-                except ExpressionError as e:
-                    self.ctx.log(EventKind.SYSTEM, f"Interlock eval error for '{name}': {e}")
-                    interlock_clear = False
-            should_be_on = interlock_clear
+
+            # Check for active override first
+            override = self.ctx.get_active_override(name)
+            if override:
+                should_be_on = override.desired_state
+                self.ctx.log(EventKind.SYSTEM, f"Using override for '{name}': {should_be_on}")
+            else:
+                # Normal flow: evaluate interlock
+                interlock_clear = True
+                if actuator_spec.interlock:
+                    try:
+                        interlock_clear = self._evaluator.evaluate(actuator_spec.interlock, flat)
+                    except ExpressionError as e:
+                        self.ctx.log(EventKind.SYSTEM, f"Interlock eval error for '{name}': {e}")
+                        interlock_clear = False
+                should_be_on = interlock_clear
             # Safety overrides
             prev = self.ctx.actuator_states.get(name)
             safety = actuator_spec.safety
