@@ -102,6 +102,9 @@ class ControlRunner:
         for sensor in self.sensors:
             reading = await sensor.read()
             self.ctx.readings[sensor.metric] = reading
+            # Persist to storage (time-series) for analytics
+            if self.store:
+                await self.store.insert_sensor_reading(reading)
 
         # 2. derive VPD
         temp = self.ctx.readings.get("temperature")
