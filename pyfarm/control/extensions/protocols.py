@@ -3,29 +3,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pyfarm.core.models import ControlEvent, SensorReading, Unit
+from pyfarm.core.sensor import Sensor as CoreSensor
+from pyfarm.core.storage import StorageBackend
 
 if TYPE_CHECKING:
     from pyfarm.control.engine.context import ControlContext
 
 
-@runtime_checkable
-class Sensor(Protocol):
-    """A source of readings for one metric. Implemented by ReplaySensor and hardware sensors."""
+# Re-export core's Sensor for backward compat and type checking
+Sensor = CoreSensor
 
-    metric: str
-    unit: Unit
-
-    async def read(self) -> SensorReading: ...
-
-    @property
-    def exhausted(self) -> bool: ...
-
-
-@runtime_checkable
-class Store(Protocol):
-    """Persists context snapshots for crash recovery. Called once per tick by the runner."""
-
-    async def write_snapshot(self, ctx: "ControlContext") -> None: ...
+# Alias StorageBackend as Store for backward compat (control pre-dates StorageBackend naming)
+Store = StorageBackend
 
 
 @runtime_checkable
