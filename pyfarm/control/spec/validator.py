@@ -71,6 +71,7 @@ _ALLOWED_NODES = (
     ast.BinOp, ast.Add, ast.Sub, ast.Mult, ast.Div,
     ast.UnaryOp, ast.USub, ast.Not,
     ast.Constant, ast.Name, ast.Attribute,
+    ast.Load,  # expression context node attached to Name/Attribute
 )
 
 
