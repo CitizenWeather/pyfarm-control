@@ -37,11 +37,18 @@ class VPDConstraint(BaseModel):
     tolerance: float
 
 
+class IrrigationSetpoint(BaseModel):
+    trigger: str  # "time" | "sensor" | "et"
+    duration_min: float
+    daily_budget_l: float | None = None
+
+
 class StageSetpoints(BaseModel):
     temperature: Setpoint | None = None
     humidity_rh: Setpoint | None = None
     co2_ppm: Setpoint | None = None
     light: LightSetpoint | None = None
+    irrigation: IrrigationSetpoint | None = None
 
 
 class Stage(BaseModel):
